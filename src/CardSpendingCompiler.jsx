@@ -371,8 +371,13 @@ export default function CardSpendingCompiler() {
 
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler (Runs in Browser)</h2>
-
+      <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler</h2>
+      <p>
+        Card Spending CSV Compiler is a client-side tool that combines transaction CSVs from multiple credit cards into a single, normalized output. It standardizes spending categories so the resulting CSV can be directly copied into the Expenses tab of this <a href="https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZUCuk/edit#gid=2058213571">Google Sheets template for year-end financial tracking.</a>
+      </p>
+      <p>
+        For more info on how to use, <a href="https://github.com/michello/year-end-financials?tab=readme-ov-file#financial-csv-compiler">please check out the readme.</a>
+      </p>
       {/* Spender input */}
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
