@@ -232,7 +232,6 @@ async function parseCsvFile(file) {
  * Header-based helpers (Venmo/Fidelity)
  * ------------------------*/
 function normalizeHeaderKey(s) {
-    console.log(s);
   return String(s ?? "")
     .replace(/\uFEFF/g, "")
     .trim()
@@ -558,9 +557,9 @@ export default function CardSpendingCompiler() {
 
   return (
     <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler</h2>
+      <h2 style={{ marginTop: 0 }}>Financial CSV Compiler</h2>
       <p>
-        Card Spending CSV Compiler is a client-side tool that combines transaction CSVs from multiple credit cards into a single, normalized output. It standardizes spending categories so the resulting CSV can be directly copied into the Expenses tab of this{" "}
+        Financial CSV Compiler is a client-side tool that combines transaction CSVs from multiple financial accounts (i.e. credit cards, banks, investment accounts) into a single, normalized output. It standardizes spending categories so the resulting CSV can be directly copied into the Expenses tab of this{" "}
         <a href="https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZUCuk/edit#gid=2058213571">
           Google Sheets template for year-end financial tracking.
         </a>

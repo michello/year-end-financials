@@ -17,7 +17,8 @@ https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZU
     - Chase (Business)  
     - Discover  
     - Old Navy  
-    - Venmo *(coming soon)*  
+    - Venmo
+    - Fidelity
     - Wealthfront *(coming soon)*  
 
 2. Upload all CSV files you want cleaned and combined by clicking **Choose File**.  
