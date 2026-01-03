@@ -203,6 +203,7 @@ export default function CardSpendingCompiler() {
   const [compiled, setCompiled] = useState([]);   // array of rows: [source,date,item,amount,category,spender]
   const [errors, setErrors] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [spenderName, setSpenderName] = useState(DEFAULT_SPENDER);
 
   const compiledWithHeader = useMemo(() => {
     const header = ["Source", "Purchase Date", "Item", "Amount", "Category", "Spender"];
@@ -253,7 +254,9 @@ export default function CardSpendingCompiler() {
           const raw_item = get(header.raw_item_index);
 
           const spender =
-            header.spender_index != null ? (row[header.spender_index] ?? DEFAULT_SPENDER) : DEFAULT_SPENDER;
+            header.spender_index != null
+                ? (row[header.spender_index] ?? spenderName)
+                : spenderName;
 
           const raw_amount_cell = get(header.raw_amount_index);
 
@@ -294,6 +297,18 @@ export default function CardSpendingCompiler() {
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
       <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler (Runs in Browser)</h2>
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
+            Spender name (used when CSV has no spender column)
+        </label>
+        <input
+            type="text"
+            value={spenderName}
+            onChange={(e) => setSpenderName(e.target.value)}
+            placeholder="Your name"
+            style={{ padding: 8, width: "100%", maxWidth: 360 }}
+        />
+        </div>
       <p style={{ color: "#555", marginTop: 6 }}>
         Upload your exported card CSVs → compile into one normalized CSV (no backend).
       </p>
