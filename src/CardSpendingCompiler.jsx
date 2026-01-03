@@ -23,7 +23,7 @@ const SUBSCRIPTION_NAMES = new Set([
 
 const BILLS = new Set(["TMOBILE*AUTO PAY"]);
 
-const SPREADSHEET_CATEGORIES = new Set([
+const SPREADSHEET_CATEGORIES = [
   "Bills",
   "Subscriptions",
   "Entertainment",
@@ -34,7 +34,10 @@ const SPREADSHEET_CATEGORIES = new Set([
   "Transport",
   "Travel",
   "Investments",
-]);
+  "Other",
+];
+
+const SPREADSHEET_CATEGORY_SET = new Set(SPREADSHEET_CATEGORIES);
 
 const DEFAULT_SPENDER = "MICHELLE LAM";
 
@@ -125,7 +128,7 @@ function isPayment(raw_item, raw_category) {
   );
 }
 
-// Mimic your python: raw_category.lower().capitalize()
+// Mimic python: raw_category.lower().capitalize()
 function pyLowerCap(s) {
   const lower = (s ?? "").toLowerCase();
   return lower ? lower[0].toUpperCase() + lower.slice(1) : "";
@@ -159,7 +162,7 @@ function processCategory(raw_item, raw_category) {
   if (lower_case.includes("Bill")) return "Bills";
   if (lower_case.includes("Amtrak")) return "Travel";
 
-  return SPREADSHEET_CATEGORIES.has(rawCat) ? rawCat : "Other";
+  return SPREADSHEET_CATEGORY_SET.has(rawCat) ? rawCat : "Other";
 }
 
 function parseNumber(raw_amount) {
@@ -200,22 +203,17 @@ async function parseCsvFile(file) {
 
 export default function CardSpendingCompiler() {
   const [filesMeta, setFilesMeta] = useState([]); // [{id, file, source, cardType}]
-  const [compiled, setCompiled] = useState([]);   // array of rows
+  const [compiled, setCompiled] = useState([]); // [{id, source, date, item, amount, category, spender}]
   const [errors, setErrors] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
 
-  // NEW: user-editable spender name
   const [spenderName, setSpenderName] = useState(DEFAULT_SPENDER);
 
-  const compiledWithHeader = useMemo(() => {
-    const header = ["Source", "Purchase Date", "Item", "Amount", "Category", "Spender"];
-    return [header, ...compiled];
-  }, [compiled]);
-
-  const previewRows = useMemo(() => compiledWithHeader.slice(0, 50), [compiledWithHeader]);
+  // Pagination state
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   function makeFileId(file) {
-    // good-enough stable key per picked file
     return `${file.name}__${file.size}__${file.lastModified}`;
   }
 
@@ -229,7 +227,7 @@ export default function CardSpendingCompiler() {
 
       for (const file of picked) {
         const id = makeFileId(file);
-        if (existingIds.has(id)) continue; // avoid duplicates
+        if (existingIds.has(id)) continue;
 
         const inferred = inferMetaFromFilename(file.name);
         next.push({
@@ -243,7 +241,7 @@ export default function CardSpendingCompiler() {
       return next;
     });
 
-    // allow picking the same file again after clearing/removing (file input won't fire if value unchanged)
+    // allow selecting the same file again later
     e.target.value = "";
   }
 
@@ -257,18 +255,44 @@ export default function CardSpendingCompiler() {
 
   function clearAllFiles() {
     setFilesMeta([]);
-    // Optional: also clear outputs/errors when clearing files (usually what people want)
     setCompiled([]);
     setErrors([]);
+    setPage(1);
+  }
+
+  // Build CSV rows from compiled objects (uses edited categories)
+  const compiledWithHeader = useMemo(() => {
+    const header = ["Source", "Purchase Date", "Item", "Amount", "Category", "Spender"];
+    const rows = compiled.map((r) => [r.source, r.date, r.item, r.amount, r.category, r.spender]);
+    return [header, ...rows];
+  }, [compiled]);
+
+  // Pagination derived values
+  const totalRows = compiled.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const currentPage = Math.min(page, totalPages);
+
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return compiled.slice(start, end);
+  }, [compiled, currentPage, pageSize]);
+
+  function setCategory(txnId, nextCategory) {
+    setCompiled((prev) =>
+      prev.map((t) => (t.id === txnId ? { ...t, category: nextCategory } : t))
+    );
   }
 
   async function run() {
     setIsRunning(true);
     setErrors([]);
     setCompiled([]);
+    setPage(1);
 
     try {
-      const output = [];
+      const out = [];
+      let rowCounter = 0;
 
       for (const meta of filesMeta) {
         const { file, source, cardType } = meta;
@@ -278,7 +302,7 @@ export default function CardSpendingCompiler() {
         let data = await parseCsvFile(file);
         if (!Array.isArray(data) || data.length === 0) continue;
 
-        // Skip CSV header row like Python: next(reader)
+        // Skip CSV header row (like Python next(reader))
         data = data.slice(1);
 
         for (const row of data) {
@@ -309,11 +333,19 @@ export default function CardSpendingCompiler() {
           const processed_category =
             cardType === CardType.OLD_NAVY ? "Shopping" : processCategory(raw_item, raw_category);
 
-          output.push([source, raw_date, raw_item, amount, processed_category, spender]);
+          out.push({
+            id: `${source}__${file.name}__${rowCounter++}`, // stable enough for this session
+            source,
+            date: raw_date,
+            item: raw_item,
+            amount,
+            category: processed_category,
+            spender,
+          });
         }
       }
 
-      setCompiled(output);
+      setCompiled(out);
     } catch (err) {
       setErrors((prev) => [
         ...prev,
@@ -329,14 +361,19 @@ export default function CardSpendingCompiler() {
     downloadTextFile("compiled-card-spending.csv", csvText);
   }
 
-  return (
-    <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler (Runs in Browser)</h2>
-      <p style={{ color: "#555", marginTop: 6 }}>
-        Upload exported card CSVs → compile into one normalized CSV (no backend).
-      </p>
+  function prevPage() {
+    setPage((p) => Math.max(1, p - 1));
+  }
 
-      {/* NEW: spender input */}
+  function nextPage() {
+    setPage((p) => Math.min(totalPages, p + 1));
+  }
+
+  return (
+    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+      <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler (Runs in Browser)</h2>
+
+      {/* Spender input */}
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
           Spender name (used when CSV has no spender column)
@@ -350,28 +387,29 @@ export default function CardSpendingCompiler() {
         />
       </div>
 
+      {/* Controls */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input type="file" accept=".csv,text/csv" multiple onChange={onPickFiles} />
+
         <button onClick={run} disabled={!filesMeta.length || isRunning} style={{ padding: "8px 12px" }}>
           {isRunning ? "Compiling…" : "Compile"}
         </button>
+
         <button onClick={download} disabled={!compiled.length} style={{ padding: "8px 12px" }}>
           Download compiled CSV
         </button>
 
-        {/* NEW: clear all */}
         <button onClick={clearAllFiles} disabled={!filesMeta.length || isRunning} style={{ padding: "8px 12px" }}>
           Clear all files
         </button>
       </div>
 
+      {/* Files table */}
       {filesMeta.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <h3 style={{ margin: 0 }}>Files ({filesMeta.length})</h3>
-            <span style={{ color: "#666" }}>
-              You can keep adding files with the uploader above.
-            </span>
+            <span style={{ color: "#666" }}>You can keep adding files with the uploader above.</span>
           </div>
 
           <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 12, marginTop: 8 }}>
@@ -409,11 +447,7 @@ export default function CardSpendingCompiler() {
                       </select>
                     </td>
                     <td style={td}>
-                      <button
-                        onClick={() => removeFile(m.id)}
-                        disabled={isRunning}
-                        style={{ padding: "8px 12px" }}
-                      >
+                      <button onClick={() => removeFile(m.id)} disabled={isRunning} style={{ padding: "8px 12px" }}>
                         Remove
                       </button>
                     </td>
@@ -429,6 +463,7 @@ export default function CardSpendingCompiler() {
         </div>
       )}
 
+      {/* Errors */}
       {errors.length > 0 && (
         <div style={{ marginTop: 16, padding: 12, border: "1px solid #f5c2c7", background: "#fff5f5", borderRadius: 12 }}>
           <h3 style={{ marginTop: 0 }}>Errors</h3>
@@ -436,38 +471,99 @@ export default function CardSpendingCompiler() {
         </div>
       )}
 
+      {/* Transactions + pagination + editable category */}
       <div style={{ marginTop: 16 }}>
-        <h3>Output</h3>
-        <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-          <div><b>Rows compiled:</b> {compiled.length}</div>
-          <div style={{ color: "#666" }}>(Preview shows first 50 rows including header)</div>
+        <h3>Transactions</h3>
+
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <b>Total transactions:</b> {totalRows}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label style={{ fontWeight: 600 }}>Rows per page</label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setPageSize(next);
+                setPage(1);
+              }}
+              style={{ padding: 8 }}
+              disabled={!compiled.length}
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={prevPage} disabled={!compiled.length || currentPage <= 1} style={{ padding: "8px 12px" }}>
+              Prev
+            </button>
+            <div style={{ color: "#555" }}>
+              Page <b>{currentPage}</b> / {totalPages}
+            </div>
+            <button onClick={nextPage} disabled={!compiled.length || currentPage >= totalPages} style={{ padding: "8px 12px" }}>
+              Next
+            </button>
+          </div>
         </div>
 
-        <div style={{ marginTop: 8, overflowX: "auto", border: "1px solid #ddd", borderRadius: 12 }}>
+        <div style={{ marginTop: 10, overflowX: "auto", border: "1px solid #ddd", borderRadius: 12 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Source</th>
+                <th style={th}>Purchase Date</th>
+                <th style={th}>Item</th>
+                <th style={th}>Amount</th>
+                <th style={th}>Category (editable)</th>
+                <th style={th}>Spender</th>
+              </tr>
+            </thead>
             <tbody>
-              {previewRows.map((row, rIdx) => (
-                <tr key={rIdx} style={rIdx === 0 ? { background: "#f7f7f7" } : undefined}>
-                  {row.map((cell, cIdx) => (
-                    <td key={cIdx} style={td}>
-                      {String(cell)}
-                    </td>
-                  ))}
+              {!compiled.length ? (
+                <tr>
+                  <td style={td} colSpan={6}>
+                    No transactions yet. Upload CSVs and click <b>Compile</b>.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                pagedRows.map((t) => (
+                  <tr key={t.id}>
+                    <td style={td}>{t.source}</td>
+                    <td style={td}>{t.date}</td>
+                    <td style={{ ...td, whiteSpace: "normal", minWidth: 280 }}>{t.item}</td>
+                    <td style={td}>{t.amount}</td>
+                    <td style={td}>
+                      <select
+                        value={SPREADSHEET_CATEGORY_SET.has(t.category) ? t.category : "Other"}
+                        onChange={(e) => setCategory(t.id, e.target.value)}
+                        style={{ padding: 8, width: "100%" }}
+                      >
+                        {SPREADSHEET_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={td}>{t.spender}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      <details style={{ marginTop: 18, color: "#666" }}>
-        <summary>Notes</summary>
-        <ul>
-          <li>Amounts strip <code>$</code> and commas before parsing.</li>
-          <li>Chase / Chase Business / Old Navy amounts are negated (matching your Python).</li>
-          <li>Payments (statement payments / online payments) are filtered out.</li>
-        </ul>
-      </details>
+        <p style={{ color: "#666", marginTop: 8 }}>
+          Tip: After you edit categories, the <b>Download compiled CSV</b> button exports your edits.
+        </p>
+      </div>
     </div>
   );
 }
