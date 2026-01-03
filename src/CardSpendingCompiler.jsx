@@ -6,6 +6,21 @@ import Papa from "papaparse";
  * Source, Purchase Date, Item, Amount, Category, Spender
  */
 
+// 🌸💜 Lilac theme
+const THEME = {
+  bg: "#faf7fc",
+  card: "#ffffff",
+  border: "#e6dff0",
+  primary: "#b48bd6",
+  primaryDark: "#9c6cc7",
+  accent: "#f2e9fb",
+  text: "#2f2a36",
+  muted: "#6f6780",
+  success: "#6bbf8e",
+  dangerBg: "#fff5f7",
+  dangerBorder: "#f3c2d3",
+};
+
 const SUBSCRIPTION_NAMES = new Set([
   "GOOGLE ONE",
   "PLANET FITNESS",
@@ -229,6 +244,68 @@ async function parseCsvFile(file) {
 }
 
 /** ------------------------
+ * Date normalization: MM/DD/YYYY
+ * ------------------------*/
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function fmtMMDDYYYY(d) {
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const yyyy = String(d.getFullYear());
+  return `${mm}/${dd}/${yyyy}`;
+}
+
+function parseUSDateTime(s) {
+  // Handles:
+  // - "MM/DD/YYYY"
+  // - "MM/DD/YYYY HH:MM"
+  // - "MM/DD/YYYY HH:MM AM"
+  // - "MM/DD/YYYY HH:MM:SS"
+  // - "MM/DD/YYYY HH:MM:SS AM"
+  const str = String(s ?? "").trim();
+  if (!str) return null;
+
+  const m = str.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?)?$/
+  );
+  if (!m) return null;
+
+  let mm = Number(m[1]);
+  let dd = Number(m[2]);
+  let yyyy = Number(m[3]);
+  if (yyyy < 100) yyyy += 2000;
+
+  let hh = m[4] != null ? Number(m[4]) : 0;
+  const min = m[5] != null ? Number(m[5]) : 0;
+  const sec = m[6] != null ? Number(m[6]) : 0;
+  const ampm = m[7] ? String(m[7]).toLowerCase() : null;
+
+  if (ampm === "pm" && hh < 12) hh += 12;
+  if (ampm === "am" && hh === 12) hh = 0;
+
+  const d = new Date(yyyy, mm - 1, dd, hh, min, sec);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function normalizePurchaseDate(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+
+  // Prefer explicit US-date parse (works for Venmo "Datetime" too)
+  const us = parseUSDateTime(s);
+  if (us) return fmtMMDDYYYY(us);
+
+  // Fall back to Date.parse for ISO-ish formats
+  const t = Date.parse(s);
+  if (!Number.isNaN(t)) return fmtMMDDYYYY(new Date(t));
+
+  // If unknown, keep original
+  return s;
+}
+
+/** ------------------------
  * Header-based helpers (Venmo/Fidelity)
  * ------------------------*/
 function normalizeHeaderKey(s) {
@@ -281,14 +358,159 @@ function applyVenmoSign(absAmount, type, venmoSign) {
   const t = String(type ?? "").trim().toLowerCase();
   const a = Math.abs(absAmount);
 
-  // Per your default convention:
-  // Payment => positive (negatePayments false)
-  // Charge  => negative (negateCharges true)
+  // Default convention: Payment positive, Charge negative
   if (t === "payment") return venmoSign.negatePayments ? -a : a;
   if (t === "charge") return venmoSign.negateCharges ? -a : a;
 
   return absAmount;
 }
+
+/** ------------------------
+ * ✨ Styles (lilac + emojis) ✨
+ * ------------------------*/
+const styles = {
+  page: {
+    padding: 24,
+    maxWidth: 1200,
+    margin: "0 auto",
+    background: THEME.bg,
+    minHeight: "100vh",
+    fontFamily: `"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto`,
+    color: THEME.text,
+  },
+  header: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 },
+  title: { margin: 0, fontSize: 28, letterSpacing: "-0.02em" },
+  subtitle: { margin: 0, color: THEME.muted, lineHeight: 1.45 },
+  card: {
+    background: THEME.card,
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    boxShadow: "0 8px 24px rgba(180,139,214,0.08)",
+  },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: `1px solid ${THEME.border}`,
+    background: THEME.accent,
+    color: THEME.muted,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  row: { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" },
+  label: { display: "block", fontWeight: 800, marginBottom: 6 },
+  input: {
+    padding: 10,
+    borderRadius: 10,
+    border: `1px solid ${THEME.border}`,
+    background: "#fff",
+    width: "100%",
+    maxWidth: 420,
+    outline: "none",
+  },
+  select: {
+    padding: 10,
+    borderRadius: 10,
+    border: `1px solid ${THEME.border}`,
+    background: "#fff",
+    outline: "none",
+  },
+  button: (variant = "primary") => ({
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: variant === "ghost" ? `1px solid ${THEME.border}` : "none",
+    background: variant === "ghost" ? "#fff" : THEME.primary,
+    color: variant === "ghost" ? THEME.text : "#fff",
+    fontWeight: 900,
+    cursor: "pointer",
+    boxShadow: variant === "ghost" ? "none" : "0 6px 18px rgba(180,139,214,0.30)",
+  }),
+  tableWrap: {
+    overflowX: "auto",
+    border: `1px solid ${THEME.border}`,
+    borderRadius: 16,
+    marginTop: 10,
+  },
+  smallMuted: { color: THEME.muted, marginTop: 8, lineHeight: 1.4 },
+  errorBox: {
+    marginTop: 16,
+    padding: 14,
+    border: `1px solid ${THEME.dangerBorder}`,
+    background: THEME.dangerBg,
+    borderRadius: 16,
+  },
+};
+
+// ✅ Sortable table helpers
+const SORTABLE_COLUMNS = [
+  { key: "source", label: "Source" },
+  { key: "date", label: "Purchase Date" },
+  { key: "item", label: "Item" },
+  { key: "amount", label: "Amount" },
+  { key: "category", label: "Category" },
+  { key: "spender", label: "Spender" },
+];
+
+function parseDateForSort(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+
+  // Use our normalized parser first
+  const d = parseUSDateTime(s);
+  if (d) return d.getTime();
+
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : t;
+}
+
+function compareValues(a, b, direction, key) {
+  const dir = direction === "desc" ? -1 : 1;
+
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+
+  if (key === "date") {
+    const ta = parseDateForSort(a);
+    const tb = parseDateForSort(b);
+    if (ta != null && tb != null) return ta < tb ? -1 * dir : ta > tb ? 1 * dir : 0;
+  }
+
+  if (typeof a === "number" && typeof b === "number") {
+    return a < b ? -1 * dir : a > b ? 1 * dir : 0;
+  }
+
+  const sa = String(a).toLowerCase();
+  const sb = String(b).toLowerCase();
+  return sa < sb ? -1 * dir : sa > sb ? 1 * dir : 0;
+}
+
+function sortIndicator(active, direction) {
+  if (!active) return "↕️";
+  return direction === "asc" ? "🔼" : "🔽";
+}
+
+const th = {
+  textAlign: "left",
+  padding: "12px 10px",
+  borderBottom: `1px solid ${THEME.border}`,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+  color: THEME.muted,
+  background: THEME.accent,
+};
+
+const td = {
+  padding: "12px 10px",
+  borderBottom: `1px solid ${THEME.border}`,
+  verticalAlign: "top",
+  whiteSpace: "nowrap",
+  color: THEME.text,
+};
 
 export default function CardSpendingCompiler() {
   const [filesMeta, setFilesMeta] = useState([]); // [{id, file, source, cardType, venmoSign?}]
@@ -301,6 +523,20 @@ export default function CardSpendingCompiler() {
   // Pagination state
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
+
+  // Sorting state
+  const [sortKey, setSortKey] = useState("date");
+  const [sortDir, setSortDir] = useState("desc"); // newest first
+
+  function toggleSort(nextKey) {
+    setPage(1);
+    if (sortKey === nextKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(nextKey);
+      setSortDir(nextKey === "amount" ? "desc" : "asc");
+    }
+  }
 
   function makeFileId(file) {
     return `${file.name}__${file.size}__${file.lastModified}`;
@@ -324,7 +560,6 @@ export default function CardSpendingCompiler() {
           file,
           source: inferred.source || file.name,
           cardType: inferred.cardType,
-          // Venmo defaults: Charge negative, Payment positive
           venmoSign:
             inferred.cardType === CardType.VENMO
               ? { negatePayments: false, negateCharges: true }
@@ -335,7 +570,6 @@ export default function CardSpendingCompiler() {
       return next;
     });
 
-    // allow selecting the same file again later
     e.target.value = "";
   }
 
@@ -354,28 +588,32 @@ export default function CardSpendingCompiler() {
     setPage(1);
   }
 
-  // Build CSV rows from compiled objects (uses edited categories)
   const compiledWithHeader = useMemo(() => {
     const header = ["Source", "Purchase Date", "Item", "Amount", "Category", "Spender"];
     const rows = compiled.map((r) => [r.source, r.date, r.item, r.amount, r.category, r.spender]);
     return [header, ...rows];
   }, [compiled]);
 
-  // Pagination derived values
-  const totalRows = compiled.length;
+  // Sort BEFORE paginate
+  const sortedCompiled = useMemo(() => {
+    if (!compiled.length) return [];
+    const copy = [...compiled];
+    copy.sort((x, y) => compareValues(x[sortKey], y[sortKey], sortDir, sortKey));
+    return copy;
+  }, [compiled, sortKey, sortDir]);
+
+  const totalRows = sortedCompiled.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const currentPage = Math.min(page, totalPages);
 
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
-    return compiled.slice(start, end);
-  }, [compiled, currentPage, pageSize]);
+    return sortedCompiled.slice(start, end);
+  }, [sortedCompiled, currentPage, pageSize]);
 
   function setCategory(txnId, nextCategory) {
-    setCompiled((prev) =>
-      prev.map((t) => (t.id === txnId ? { ...t, category: nextCategory } : t))
-    );
+    setCompiled((prev) => prev.map((t) => (t.id === txnId ? { ...t, category: nextCategory } : t)));
   }
 
   async function run() {
@@ -397,9 +635,7 @@ export default function CardSpendingCompiler() {
           if (!Array.isArray(data) || data.length === 0) continue;
 
           const headerRowIdx = findVenmoHeaderRowIndex(data);
-          if (headerRowIdx < 0) {
-            throw new Error(`Venmo header row not found in file: ${file.name}`);
-          }
+          if (headerRowIdx < 0) throw new Error(`Venmo header row not found in file: ${file.name}`);
 
           const headerRow = data[headerRowIdx];
           const map = headerIndexMap(headerRow);
@@ -413,7 +649,9 @@ export default function CardSpendingCompiler() {
             const status = normalizeCell(getByHeaderIdx(row, map, "Status")).toLowerCase();
             if (!status.startsWith("complete")) continue;
 
-            const dt = getByHeaderIdx(row, map, "Datetime");
+            const dtRaw = getByHeaderIdx(row, map, "Datetime");
+            const dt = normalizePurchaseDate(dtRaw);
+
             const note = getByHeaderIdx(row, map, "Note");
             const type = getByHeaderIdx(row, map, "Type");
             const amtRaw = getByHeaderIdx(row, map, "Amount (total)");
@@ -421,7 +659,6 @@ export default function CardSpendingCompiler() {
             const parsed = parseNumber(amtRaw);
             if (parsed == null) continue;
 
-            // Ignore Venmo CSV sign and apply our convention using Type + toggles
             const baseAmount = Math.abs(parsed);
             const amount = applyVenmoSign(baseAmount, type, venmoSign);
 
@@ -435,51 +672,52 @@ export default function CardSpendingCompiler() {
               spender: spenderName,
             });
           }
-
           continue;
         }
 
         // ---- FIDELITY ----
         if (cardType === CardType.FIDELITY) {
-            let data = await parseCsvFile(file);
-            if (!Array.isArray(data) || data.length === 0) continue;
+          const data = await parseCsvFile(file);
+          if (!Array.isArray(data) || data.length === 0) continue;
 
-            // Heuristic: skip header row if it looks like one
-            const looksLikeHeader = (row) => {
-                const first = String(row?.[0] ?? "").toLowerCase();
-                return first.includes("date") || first.includes("run date");
-            };
+          const headerRow = data[0];
+          const map = headerIndexMap(headerRow);
 
-            let startIdx = 0;
-            if (looksLikeHeader(data[0])) startIdx = 1;
+          for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            if (!row || !row.length) continue;
 
-            for (let i = startIdx; i < data.length; i++) {
-                const row = data[i];
-                if (!row || !row.length) continue;
+            const type = getByHeaderIdx(row, map, "Type");
+            const action = getByHeaderIdx(row, map, "Action");
 
-                const date = String(row[0] ?? "").trim();
-                const txnType = String(row[3] ?? "").trim();     // "Contributions"
-                const item = String(row[5] ?? "").trim();        // investment name
-                const amtRaw = row[12];                          // amount
+            const isContribution =
+              normalizeHeaderKey(type) === "contributions" || normalizeHeaderKey(action).includes("contribution");
 
-                if (normalizeHeaderKey(txnType) !== "contributions") continue;
+            if (!isContribution) continue;
 
-                const amtParsed = parseNumber(amtRaw);
-                if (amtParsed == null) continue;
+            const runDateRaw = getByHeaderIdx(row, map, "Run Date");
+            const settlementDateRaw = getByHeaderIdx(row, map, "Settlement Date");
+            const date = normalizePurchaseDate(settlementDateRaw || runDateRaw);
 
-                out.push({
-                id: `Fidelity__${file.name}__${rowCounter++}`,
-                source: "Fidelity",
-                date,
-                item: item || "(Fidelity Contribution)",
-                amount: Math.abs(amtParsed),
-                category: "Investments",
-                spender: spenderName,
-                });
-            }
+            const description = getByHeaderIdx(row, map, "Description");
+            const symbol = getByHeaderIdx(row, map, "Symbol");
+            const amtRaw = getByHeaderIdx(row, map, "Amount ($)");
 
-            continue;
-            }
+            const amtParsed = parseNumber(amtRaw);
+            if (amtParsed == null) continue;
+
+            out.push({
+              id: `Fidelity__${file.name}__${rowCounter++}`,
+              source: "Fidelity",
+              date,
+              item: description || symbol || "(Fidelity Contribution)",
+              amount: Math.abs(amtParsed),
+              category: "Investments",
+              spender: spenderName,
+            });
+          }
+          continue;
+        }
 
         // ---- OTHER CARDS ----
         const header = CARD_TO_HEADER_INDEX[cardType];
@@ -488,29 +726,26 @@ export default function CardSpendingCompiler() {
         let data = await parseCsvFile(file);
         if (!Array.isArray(data) || data.length === 0) continue;
 
-        // Skip CSV header row (like Python next(reader))
         data = data.slice(1);
 
         for (const row of data) {
           const get = (idx) => (idx == null ? "" : (row[idx] ?? ""));
 
           const raw_date = get(header.raw_date_index);
+          const date = normalizePurchaseDate(raw_date);
+
           const raw_category = get(header.raw_category_index);
           const raw_item = get(header.raw_item_index);
 
           const spender =
-            header.spender_index != null
-              ? (row[header.spender_index] ?? spenderName)
-              : spenderName;
+            header.spender_index != null ? (row[header.spender_index] ?? spenderName) : spenderName;
 
           const raw_amount_cell = get(header.raw_amount_index);
 
           if (isPayment(raw_item, raw_category)) continue;
 
           const amount =
-            cardType === CardType.CHASE ||
-            cardType === CardType.CHASE_BUSINESS ||
-            cardType === CardType.OLD_NAVY
+            cardType === CardType.CHASE || cardType === CardType.CHASE_BUSINESS || cardType === CardType.OLD_NAVY
               ? processRawAmount(raw_amount_cell)
               : parseNumber(raw_amount_cell);
 
@@ -522,7 +757,7 @@ export default function CardSpendingCompiler() {
           out.push({
             id: `${source}__${file.name}__${rowCounter++}`,
             source,
-            date: raw_date,
+            date,
             item: raw_item,
             amount,
             category: processed_category,
@@ -533,10 +768,7 @@ export default function CardSpendingCompiler() {
 
       setCompiled(out);
     } catch (err) {
-      setErrors((prev) => [
-        ...prev,
-        typeof err === "string" ? err : JSON.stringify(err, null, 2),
-      ]);
+      setErrors((prev) => [...prev, typeof err === "string" ? err : JSON.stringify(err, null, 2)]);
     } finally {
       setIsRunning(false);
     }
@@ -556,66 +788,73 @@ export default function CardSpendingCompiler() {
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
-      <h2 style={{ marginTop: 0 }}>Financial CSV Compiler</h2>
-      <p>
-        Financial CSV Compiler is a client-side tool that combines transaction CSVs from multiple financial accounts (i.e. credit cards, banks, investment accounts) into a single, normalized output. It standardizes spending categories so the resulting CSV can be directly copied into the Expenses tab of this{" "}
-        <a href="https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZUCuk/edit#gid=2058213571">
-          Google Sheets template for year-end financial tracking.
-        </a>
-      </p>
-      <p>
-        For more info on how to use,{" "}
-        <a href="https://github.com/michello/year-end-financials?tab=readme-ov-file#financial-csv-compiler">
-          please check out the readme.
-        </a>
-      </p>
+    <div style={styles.page}>
+      <div style={styles.header}>
+        <h2 style={styles.title}>💜 Financial Spending CSV Compiler</h2>
+        <p style={styles.subtitle}>🌷 Combine CSVs into one normalized export <a style={styles.subtitle} href="https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZUCuk/edit?gid=1528073380#gid=1528073380">you can paste into your tracker.</a>
+           For more info on how to use, <a style={styles.subtitle} href="https://github.com/michello/year-end-financials?tab=readme-ov-file#financial-csv-compiler">please check out the readme.</a></p>
+      </div>
 
       {/* Spender input */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
-          Spender name (used when CSV has no spender column)
-        </label>
+      <div style={styles.card}>
+        <label style={styles.label}>🙋‍♀️ Spender name</label>
         <input
           type="text"
           value={spenderName}
           onChange={(e) => setSpenderName(e.target.value)}
           placeholder="Your name"
-          style={{ padding: 8, width: "100%", maxWidth: 360 }}
+          style={styles.input}
         />
+        <div style={styles.smallMuted}>Used when a CSV doesn’t have a spender column.</div>
       </div>
 
       {/* Controls */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <input type="file" accept=".csv,text/csv" multiple onChange={onPickFiles} />
+      <div style={styles.card}>
+        <div style={styles.row}>
+          <input type="file" accept=".csv,text/csv" multiple onChange={onPickFiles} />
 
-        <button onClick={run} disabled={!filesMeta.length || isRunning} style={{ padding: "8px 12px" }}>
-          {isRunning ? "Compiling…" : "Compile"}
-        </button>
+          <button
+            onClick={run}
+            disabled={!filesMeta.length || isRunning}
+            style={{ ...styles.button("primary"), opacity: !filesMeta.length || isRunning ? 0.6 : 1 }}
+          >
+            {isRunning ? "🧪 Compiling…" : "✨ Compile"}
+          </button>
 
-        <button onClick={download} disabled={!compiled.length} style={{ padding: "8px 12px" }}>
-          Download compiled CSV
-        </button>
+          <button
+            onClick={download}
+            disabled={!compiled.length}
+            style={{ ...styles.button("primary"), opacity: !compiled.length ? 0.6 : 1 }}
+          >
+            ⬇️ Download compiled CSV
+          </button>
 
-        <button onClick={clearAllFiles} disabled={!filesMeta.length || isRunning} style={{ padding: "8px 12px" }}>
-          Clear all files
-        </button>
+          <button
+            onClick={clearAllFiles}
+            disabled={!filesMeta.length || isRunning}
+            style={{ ...styles.button("ghost"), opacity: !filesMeta.length || isRunning ? 0.6 : 1 }}
+          >
+            🧹 Clear all
+          </button>
+        </div>
       </div>
 
-      {/* Files table */}
+      {/* Files table (edit options) */}
       {filesMeta.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <h3 style={{ margin: 0 }}>Files ({filesMeta.length})</h3>
-            <span style={{ color: "#666" }}>You can keep adding files with the uploader above.</span>
+        <div style={styles.card}>
+          <div style={{ ...styles.row, justifyContent: "space-between" }}>
+            <h3 style={{ margin: 0 }}>📂 Files ({filesMeta.length})</h3>
+            <span style={{ color: THEME.muted, fontWeight: 600 }}>
+              Edit source / card type / Venmo sign rules ✨
+            </span>
           </div>
 
-          <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 12, marginTop: 8 }}>
+          <div style={styles.tableWrap}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   <th style={th}>Filename</th>
-                  <th style={th}>Source (output col)</th>
+                  <th style={th}>Source</th>
                   <th style={th}>Card Type</th>
                   <th style={th}>Options</th>
                   <th style={th}>Actions</th>
@@ -625,13 +864,15 @@ export default function CardSpendingCompiler() {
                 {filesMeta.map((m) => (
                   <tr key={m.id}>
                     <td style={td}>{m.file.name}</td>
+
                     <td style={td}>
                       <input
                         value={m.source}
                         onChange={(e) => updateMeta(m.id, { source: e.target.value })}
-                        style={{ width: "100%", padding: 8 }}
+                        style={{ ...styles.input, maxWidth: 320 }}
                       />
                     </td>
+
                     <td style={td}>
                       <select
                         value={m.cardType}
@@ -643,13 +884,10 @@ export default function CardSpendingCompiler() {
                               nextType === CardType.VENMO
                                 ? (m.venmoSign ?? { negatePayments: false, negateCharges: true })
                                 : undefined,
-                            source:
-                              nextType === CardType.FIDELITY
-                                ? "Fidelity"
-                                : m.source,
+                            source: nextType === CardType.FIDELITY ? "Fidelity" : m.source,
                           });
                         }}
-                        style={{ width: "100%", padding: 8 }}
+                        style={styles.select}
                       >
                         {Object.values(CardType).map((ct) => (
                           <option key={ct} value={ct}>
@@ -659,10 +897,9 @@ export default function CardSpendingCompiler() {
                       </select>
                     </td>
 
-                    {/* Options */}
-                    <td style={{ ...td, whiteSpace: "normal" }}>
+                    <td style={{ ...td, whiteSpace: "normal", minWidth: 260 }}>
                       {m.cardType === CardType.VENMO ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                             <input
                               type="checkbox"
@@ -695,18 +932,22 @@ export default function CardSpendingCompiler() {
                             Make <b>Charge</b> negative
                           </label>
 
-                          <div style={{ color: "#666", fontSize: 12 }}>
-                            Default: Payment = positive, Charge = negative
+                          <div style={{ color: THEME.muted, fontSize: 12 }}>
+                            Default: Payment = positive, Charge = negative 💸
                           </div>
                         </div>
                       ) : (
-                        <span style={{ color: "#666" }}>—</span>
+                        <span style={{ color: THEME.muted }}>—</span>
                       )}
                     </td>
 
                     <td style={td}>
-                      <button onClick={() => removeFile(m.id)} disabled={isRunning} style={{ padding: "8px 12px" }}>
-                        Remove
+                      <button
+                        onClick={() => removeFile(m.id)}
+                        disabled={isRunning}
+                        style={{ ...styles.button("ghost"), opacity: isRunning ? 0.6 : 1 }}
+                      >
+                        🗑️ Remove
                       </button>
                     </td>
                   </tr>
@@ -715,31 +956,27 @@ export default function CardSpendingCompiler() {
             </table>
           </div>
 
-          <p style={{ color: "#666", marginTop: 8 }}>
-            If auto-detection gets a card wrong, change the card type dropdown.
-          </p>
+          <p style={styles.smallMuted}>💡 If auto-detection gets a card wrong, change the Card Type dropdown.</p>
         </div>
       )}
 
       {/* Errors */}
       {errors.length > 0 && (
-        <div style={{ marginTop: 16, padding: 12, border: "1px solid #f5c2c7", background: "#fff5f5", borderRadius: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Errors</h3>
-          <pre style={{ whiteSpace: "pre-wrap" }}>{errors.join("\n\n")}</pre>
+        <div style={styles.errorBox}>
+          <h3 style={{ marginTop: 0 }}>⚠️ Errors</h3>
+          <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{errors.join("\n\n")}</pre>
         </div>
       )}
 
-      {/* Transactions + pagination + editable category */}
-      <div style={{ marginTop: 16 }}>
-        <h3>Transactions</h3>
+      {/* Transactions + pagination + sortable headers */}
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>🧾 Transactions</h3>
 
-        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <div>
-            <b>Total transactions:</b> {totalRows}
-          </div>
+        <div style={styles.row}>
+          <div style={styles.pill}>📌 Total: {totalRows}</div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label style={{ fontWeight: 600 }}>Rows per page</label>
+            <label style={{ fontWeight: 900, color: THEME.muted }}>Rows/page</label>
             <select
               value={pageSize}
               onChange={(e) => {
@@ -747,8 +984,8 @@ export default function CardSpendingCompiler() {
                 setPageSize(next);
                 setPage(1);
               }}
-              style={{ padding: 8 }}
-              disabled={!compiled.length}
+              style={styles.select}
+              disabled={!sortedCompiled.length}
             >
               {[10, 25, 50, 100].map((n) => (
                 <option key={n} value={n}>
@@ -758,36 +995,57 @@ export default function CardSpendingCompiler() {
             </select>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button onClick={prevPage} disabled={!compiled.length || currentPage <= 1} style={{ padding: "8px 12px" }}>
-              Prev
-            </button>
-            <div style={{ color: "#555" }}>
-              Page <b>{currentPage}</b> / {totalPages}
-            </div>
-            <button onClick={nextPage} disabled={!compiled.length || currentPage >= totalPages} style={{ padding: "8px 12px" }}>
-              Next
-            </button>
+          <button
+            onClick={prevPage}
+            disabled={!sortedCompiled.length || currentPage <= 1}
+            style={{ ...styles.button("ghost"), opacity: !sortedCompiled.length || currentPage <= 1 ? 0.5 : 1 }}
+          >
+            ⬅️ Prev
+          </button>
+
+          <div style={styles.pill}>
+            📄 Page <b>{currentPage}</b> / {totalPages}
+          </div>
+
+          <button
+            onClick={nextPage}
+            disabled={!sortedCompiled.length || currentPage >= totalPages}
+            style={{
+              ...styles.button("ghost"),
+              opacity: !sortedCompiled.length || currentPage >= totalPages ? 0.5 : 1,
+            }}
+          >
+            Next ➡️
+          </button>
+
+          <div style={styles.pill}>
+            🔀 Sorting: <b>{SORTABLE_COLUMNS.find((c) => c.key === sortKey)?.label}</b>{" "}
+            {sortDir === "asc" ? "🔼" : "🔽"}
           </div>
         </div>
 
-        <div style={{ marginTop: 10, overflowX: "auto", border: "1px solid #ddd", borderRadius: 12 }}>
+        <div style={styles.tableWrap}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={th}>Source</th>
-                <th style={th}>Purchase Date</th>
-                <th style={th}>Item</th>
-                <th style={th}>Amount</th>
-                <th style={th}>Category (editable)</th>
-                <th style={th}>Spender</th>
+                {SORTABLE_COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    style={{ ...th, cursor: "pointer", userSelect: "none" }}
+                    onClick={() => toggleSort(col.key)}
+                    title="Click to sort"
+                  >
+                    {col.label}{" "}
+                    <span style={{ fontSize: 12 }}>{sortIndicator(sortKey === col.key, sortDir)}</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {!compiled.length ? (
+              {!sortedCompiled.length ? (
                 <tr>
                   <td style={td} colSpan={6}>
-                    No transactions yet. Upload CSVs and click <b>Compile</b>.
+                    ✨ No transactions yet. Upload CSVs and click <b>Compile</b> to get started.
                   </td>
                 </tr>
               ) : (
@@ -795,13 +1053,16 @@ export default function CardSpendingCompiler() {
                   <tr key={t.id}>
                     <td style={td}>{t.source}</td>
                     <td style={td}>{t.date}</td>
-                    <td style={{ ...td, whiteSpace: "normal", minWidth: 280 }}>{t.item}</td>
-                    <td style={td}>{t.amount}</td>
+                    <td style={{ ...td, whiteSpace: "normal", minWidth: 320 }}>{t.item}</td>
+                    <td style={td}>
+                      {t.amount < 0 ? "💸 " : "💰 "}
+                      {t.amount}
+                    </td>
                     <td style={td}>
                       <select
                         value={SPREADSHEET_CATEGORY_SET.has(t.category) ? t.category : "Other"}
                         onChange={(e) => setCategory(t.id, e.target.value)}
-                        style={{ padding: 8, width: "100%" }}
+                        style={{ ...styles.select, width: "100%" }}
                       >
                         {SPREADSHEET_CATEGORIES.map((cat) => (
                           <option key={cat} value={cat}>
@@ -818,25 +1079,8 @@ export default function CardSpendingCompiler() {
           </table>
         </div>
 
-        <p style={{ color: "#666", marginTop: 8 }}>
-          Tip: After you edit categories, the <b>Download compiled CSV</b> button exports your edits.
-        </p>
+        <p style={styles.smallMuted}>💡 Tip: Click any column header to sort (click again to flip direction).</p>
       </div>
     </div>
   );
 }
-
-const th = {
-  textAlign: "left",
-  padding: "10px 8px",
-  borderBottom: "1px solid #ddd",
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-};
-
-const td = {
-  padding: "10px 8px",
-  borderBottom: "1px solid #eee",
-  verticalAlign: "top",
-  whiteSpace: "nowrap",
-};
