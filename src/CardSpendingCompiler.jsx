@@ -92,7 +92,7 @@ const CARD_TO_HEADER_INDEX = {
   },
 };
 
-// Auto-detect (optional) based on filename; user can override in UI.
+// Auto-detect based on filename; user can override in UI.
 const FILENAME_HINTS = [
   { contains: "amex-gold", source: "Amex - Gold", cardType: CardType.AMEX },
   { contains: "amex-blue-cash", source: "Amex - Blue Cash", cardType: CardType.AMEX },
@@ -199,10 +199,12 @@ async function parseCsvFile(file) {
 }
 
 export default function CardSpendingCompiler() {
-  const [filesMeta, setFilesMeta] = useState([]); // [{file, source, cardType}]
-  const [compiled, setCompiled] = useState([]);   // array of rows: [source,date,item,amount,category,spender]
+  const [filesMeta, setFilesMeta] = useState([]); // [{id, file, source, cardType}]
+  const [compiled, setCompiled] = useState([]);   // array of rows
   const [errors, setErrors] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
+
+  // NEW: user-editable spender name
   const [spenderName, setSpenderName] = useState(DEFAULT_SPENDER);
 
   const compiledWithHeader = useMemo(() => {
@@ -212,19 +214,52 @@ export default function CardSpendingCompiler() {
 
   const previewRows = useMemo(() => compiledWithHeader.slice(0, 50), [compiledWithHeader]);
 
-  function onPickFiles(e) {
-    const picked = Array.from(e.target.files || []);
-    const metas = picked.map((file) => {
-      const inferred = inferMetaFromFilename(file.name);
-      return { file, source: inferred.source || file.name, cardType: inferred.cardType };
-    });
-    setFilesMeta(metas);
-    setCompiled([]);
-    setErrors([]);
+  function makeFileId(file) {
+    // good-enough stable key per picked file
+    return `${file.name}__${file.size}__${file.lastModified}`;
   }
 
-  function updateMeta(idx, patch) {
-    setFilesMeta((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  function onPickFiles(e) {
+    const picked = Array.from(e.target.files || []);
+    if (!picked.length) return;
+
+    setFilesMeta((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const next = [...prev];
+
+      for (const file of picked) {
+        const id = makeFileId(file);
+        if (existingIds.has(id)) continue; // avoid duplicates
+
+        const inferred = inferMetaFromFilename(file.name);
+        next.push({
+          id,
+          file,
+          source: inferred.source || file.name,
+          cardType: inferred.cardType,
+        });
+        existingIds.add(id);
+      }
+      return next;
+    });
+
+    // allow picking the same file again after clearing/removing (file input won't fire if value unchanged)
+    e.target.value = "";
+  }
+
+  function updateMeta(id, patch) {
+    setFilesMeta((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
+
+  function removeFile(id) {
+    setFilesMeta((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  function clearAllFiles() {
+    setFilesMeta([]);
+    // Optional: also clear outputs/errors when clearing files (usually what people want)
+    setCompiled([]);
+    setErrors([]);
   }
 
   async function run() {
@@ -255,8 +290,8 @@ export default function CardSpendingCompiler() {
 
           const spender =
             header.spender_index != null
-                ? (row[header.spender_index] ?? spenderName)
-                : spenderName;
+              ? (row[header.spender_index] ?? spenderName)
+              : spenderName;
 
           const raw_amount_cell = get(header.raw_amount_index);
 
@@ -297,21 +332,23 @@ export default function CardSpendingCompiler() {
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
       <h2 style={{ marginTop: 0 }}>Card Spending CSV Compiler (Runs in Browser)</h2>
+      <p style={{ color: "#555", marginTop: 6 }}>
+        Upload exported card CSVs → compile into one normalized CSV (no backend).
+      </p>
+
+      {/* NEW: spender input */}
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: "block", fontWeight: 600, marginBottom: 6 }}>
-            Spender name (used when CSV has no spender column)
+          Spender name (used when CSV has no spender column)
         </label>
         <input
-            type="text"
-            value={spenderName}
-            onChange={(e) => setSpenderName(e.target.value)}
-            placeholder="Your name"
-            style={{ padding: 8, width: "100%", maxWidth: 360 }}
+          type="text"
+          value={spenderName}
+          onChange={(e) => setSpenderName(e.target.value)}
+          placeholder="Your name"
+          style={{ padding: 8, width: "100%", maxWidth: 360 }}
         />
-        </div>
-      <p style={{ color: "#555", marginTop: 6 }}>
-        Upload your exported card CSVs → compile into one normalized CSV (no backend).
-      </p>
+      </div>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <input type="file" accept=".csv,text/csv" multiple onChange={onPickFiles} />
@@ -321,35 +358,47 @@ export default function CardSpendingCompiler() {
         <button onClick={download} disabled={!compiled.length} style={{ padding: "8px 12px" }}>
           Download compiled CSV
         </button>
+
+        {/* NEW: clear all */}
+        <button onClick={clearAllFiles} disabled={!filesMeta.length || isRunning} style={{ padding: "8px 12px" }}>
+          Clear all files
+        </button>
       </div>
 
       {filesMeta.length > 0 && (
         <div style={{ marginTop: 16 }}>
-          <h3>Files</h3>
-          <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0 }}>Files ({filesMeta.length})</h3>
+            <span style={{ color: "#666" }}>
+              You can keep adding files with the uploader above.
+            </span>
+          </div>
+
+          <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 12, marginTop: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   <th style={th}>Filename</th>
                   <th style={th}>Source (output col)</th>
                   <th style={th}>Card Type</th>
+                  <th style={th}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filesMeta.map((m, idx) => (
-                  <tr key={m.file.name}>
+                {filesMeta.map((m) => (
+                  <tr key={m.id}>
                     <td style={td}>{m.file.name}</td>
                     <td style={td}>
                       <input
                         value={m.source}
-                        onChange={(e) => updateMeta(idx, { source: e.target.value })}
+                        onChange={(e) => updateMeta(m.id, { source: e.target.value })}
                         style={{ width: "100%", padding: 8 }}
                       />
                     </td>
                     <td style={td}>
                       <select
                         value={m.cardType}
-                        onChange={(e) => updateMeta(idx, { cardType: e.target.value })}
+                        onChange={(e) => updateMeta(m.id, { cardType: e.target.value })}
                         style={{ width: "100%", padding: 8 }}
                       >
                         {Object.values(CardType).map((ct) => (
@@ -359,6 +408,15 @@ export default function CardSpendingCompiler() {
                         ))}
                       </select>
                     </td>
+                    <td style={td}>
+                      <button
+                        onClick={() => removeFile(m.id)}
+                        disabled={isRunning}
+                        style={{ padding: "8px 12px" }}
+                      >
+                        Remove
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -366,7 +424,7 @@ export default function CardSpendingCompiler() {
           </div>
 
           <p style={{ color: "#666", marginTop: 8 }}>
-            If auto-detection gets a card wrong, just change the card type dropdown.
+            If auto-detection gets a card wrong, change the card type dropdown.
           </p>
         </div>
       )}
