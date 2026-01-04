@@ -792,7 +792,7 @@ export default function CardSpendingCompiler() {
       <div style={styles.header}>
         <h2 style={styles.title}>💜 Financial Spending CSV Compiler</h2>
         <p style={styles.subtitle}>🌷 Combine CSVs into one normalized export <a style={styles.subtitle} href="https://docs.google.com/spreadsheets/d/12fIziabNlr78DHNmiQKuXEieBptjaTfjoyrLM1ZUCuk/edit?gid=1528073380#gid=1528073380">you can paste into your tracker.</a>
-           For more info on how to use, <a style={styles.subtitle} href="https://github.com/michello/year-end-financials?tab=readme-ov-file#financial-csv-compiler">please check out the readme.</a></p>
+           For more info on how to use, <a style={styles.subtitle} href="https://github.com/michello/financial-spending-csv-compiler?tab=readme-ov-file#financial-csv-compiler">please check out the readme.</a></p>
       </div>
 
       {/* Spender input */}
